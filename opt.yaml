@@ -1,0 +1,21 @@
+# english (None-VGG-BiLSTM-CTC)
+imgH: 64
+imgW: 200
+num_fiducial: 20
+num_class: 82
+batch_max_length: 25
+lang_list: ['ko']
+input_channel: 1
+output_channel: 512
+hidden_size: 256
+
+ 
+Transformation : TPS
+FeatureExtraction : ResNet
+SequenceModeling : BiLSTM
+Prediction : Attn
+saved_model : ./models/final_ocr_model.pth
+batch_size : 1
+workers : 0 
+
+character_list: "0123456789가나다라마거너더러머버서어저고노도로모보소오조구누두루무부수우주아바사자배하허호국합육해공외교영사준협정대표울산대인천광경기강원충전북남경제"
