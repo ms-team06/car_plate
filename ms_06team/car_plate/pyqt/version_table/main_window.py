@@ -1,10 +1,12 @@
-import csv
+import os, re, random, inspect, math, csv
 import pyqt5_fugueicons as fugue
 import cv2
 import smtplib
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+
+from datetime import datetime
 
 from PyQt5.QtCore import *
 from PyQt5.Qt import *
@@ -14,8 +16,6 @@ from PyQt5.QtWebEngineWidgets import *
 
 from make_new_window import *
 
-from datetime import datetime
-
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -23,7 +23,6 @@ class MainWindow(QMainWindow):
 
         # 전역 변수
         self.video_source = None
-        self.button_return_values = {}    # 버튼 출력값 처리
 
         self.setWindowTitle("EV 차량 번호판 감지 프로그램")
         self.setGeometry(100, 100, 1200, 800)
@@ -108,68 +107,37 @@ class MainWindow(QMainWindow):
 
         tab2_inner_layout1 = QVBoxLayout()
         tab2_inner_layout1.addWidget(self.image_viewer)
+
+        ### (3-2) 오른쪽 위젯 (테이블)
+        #### 레이블
+        self.tab2_item_list_label = QLabel('✅ 관리자 설정', font=QFont('Malgun Gothic', 18, QFont.Bold))  
+        self.tab2_item_list_label.setStyleSheet("background-color: rgba(189, 189, 189, 0.1);")
+
+        #### 테이블
+        self.tab2_item_list_table = QTableWidget(font=QFont('Malgun Gothic', 10))
+        headers = ["√", "EV", "번호판(1줄)", "번호판(2줄)", "🖼️"]
+        self.tab2_item_list_table.setColumnCount(len(headers))
+        self.tab2_item_list_table.setHorizontalHeaderLabels(headers)
+        self.tab2_item_list_table.setStyleSheet("background-color: white;")
+        self.tab2_item_list_table.setEditTriggers(QTableWidget.NoEditTriggers)    # 수정 금지
         
 
-        ### (3-2) 오른쪽 위젯
-        #### 레이블
-        self.tab2_section_label = QLabel('✅ 버튼 클릭', font=QFont('Malgun Gothic', 18, QFont.Bold))  
-        self.tab2_section_label.setStyleSheet("background-color: rgba(189, 189, 189, 0.1);")
-        self.tab2_section_label.setAlignment(Qt.AlignCenter)
+        # 컬럼 더블 클릭시 오름차순/내림차순 정렬
+        self.tab2_item_list_table.horizontalHeader().sectionDoubleClicked.connect(lambda col: self.on_header_double_clicked_table(col, self.tab2_item_list_table))
+        
+        # 각 컬럼 사이즈 설정
+        self.tab2_item_list_table.setColumnWidth(0, 10)
+        self.tab2_item_list_table.setColumnWidth(1, 60) 
+        self.tab2_item_list_table.setColumnWidth(2, 60) 
+        self.tab2_item_list_table.setColumnWidth(3, 60) 
+        self.tab2_item_list_table.setColumnWidth(4, 10)
 
-        #### 버튼 모음
-        self.tab2_button_ev = QPushButton('EV', self)
-        self.tab2_one_line_ev = QPushButton('One Line', self)
-        self.tab2_two_line_ev = QPushButton('Two Line', self)
-
-        button_style = (
-            "QPushButton {"
-            "   background-color: #4CAF50;"
-            "   border: none;"
-            "   color: white;"
-            "   padding: 10px 20px;"
-            "   text-align: center;"
-            "   text-decoration: none;"
-            "   display: inline-block;"
-            "   font-size: 16px;"
-            "   margin: 4px 2px;"
-            "   cursor: pointer;"
-            "   border-radius: 8px;"
-            "   font-weight: bold;"
-            "   font-family: Consolas;"
-            "}"
-            "QPushButton:hover {"
-            "   background-color: #45a049;"
-            "}"
-            "QPushButton:pressed {"
-            "   background-color: #367d39;"
-            "}"
-        )
-
-        self.tab2_button_ev.setStyleSheet(button_style)
-        self.tab2_one_line_ev.setStyleSheet(button_style)
-        self.tab2_two_line_ev.setStyleSheet(button_style)
-
-        self.tab2_button_ev.clicked.connect(lambda: self.on_button_click("EV"))
-        self.tab2_one_line_ev.clicked.connect(lambda: self.on_button_click("One Line"))
-        self.tab2_two_line_ev.clicked.connect(lambda: self.on_button_click("Two Line"))
-
+        self.tab2_item_list_table.cellDoubleClicked.connect(self.copy_image_to_image_viewer) 
 
         #### 레이아웃에 위젯 부착
-        tab2_inner_layout2_1 = QVBoxLayout()
-        tab2_inner_layout2_1.addWidget(self.tab2_section_label)
-
-        tab2_inner_layout2_2 = QVBoxLayout()
-        tab2_inner_layout2_2.addWidget(self.tab2_button_ev)
-        tab2_inner_layout2_2.addWidget(self.tab2_one_line_ev)
-        tab2_inner_layout2_2.addWidget(self.tab2_two_line_ev)
-
         tab2_inner_layout2 = QVBoxLayout()
-        tab2_inner_layout2.addStretch()  # 위쪽 여백 추가
-        tab2_inner_layout2.addLayout(tab2_inner_layout2_1)
-        tab2_inner_layout2.addLayout(tab2_inner_layout2_2)
-        tab2_inner_layout2.addStretch()  # 아래쪽 여백 추가
-
-        
+        tab2_inner_layout2.addWidget(self.tab2_item_list_label)
+        tab2_inner_layout2.addWidget(self.tab2_item_list_table)
 
         #### 위젯에 레이아웃 부착
         tab2_widget1 = QWidget()
@@ -254,7 +222,7 @@ class MainWindow(QMainWindow):
         """
         
 
-        ## (6) 툴바 생성 및 설정, 그리고 레이아웃에 부착
+        ## (6) 📦 툴바 생성 및 설정, 그리고 레이아웃에 부착
         ### 툴바1 생성 (탭1)
         self.tab1_toolbar1 = QToolBar()
         self.tab1_toolbar1.setMovable(False)
@@ -301,6 +269,9 @@ class MainWindow(QMainWindow):
             ("테이블에 내용 불러오기 (CSV)", "table-import", lambda: self.import_table_widget(self.tab1_item_list_table), False, False),
             ("테이블 내용 내보내기 (CSV)", "table-export", lambda: self.export_table_widget(self.tab1_item_list_table), False, False),
             ("선택한 행 지우기", "scissors-blue", lambda: self.delete_selected_row_on_table(self.tab1_item_list_table), False, False),
+            # ("구분선", "", "", "", ""),
+            # ("이메일로 보내기", "mail", self.send_email, False, False),
+            # ("카카오톡으로 보내기", "./icon/kakaotalk.ico_ni", self.send_kakaotalk_alarm, False, False),
         ]
 
         tab2_toolbar1_actions = [
@@ -308,15 +279,21 @@ class MainWindow(QMainWindow):
             ("이미지 지우기", "scissors", lambda: self.clear_the_content("이미지"), False, False),
         ]
 
+        tab2_toolbar2_actions = [
+            ("결과 확인", "system-monitor", self.show_the_result, False, False),
+            ("선택한 행 지우기", "scissors-blue", lambda: self.delete_selected_row_on_table(self.tab2_item_list_table), False, False),
+        ]
 
         self.setToobarWithActions("툴바1", tab1_toolbar1_actions)
         self.setToobarWithActions("툴바2", tab1_toolbar2_actions)
         self.setToobarWithActions("툴바3", tab2_toolbar1_actions)
+        self.setToobarWithActions("툴바4", tab2_toolbar2_actions)
 
         
         tab1_inner_layout1.addWidget(self.tab1_toolbar1)    
         tab1_inner_layout2.addWidget(self.tab1_toolbar2)    
         tab2_inner_layout1.addWidget(self.tab2_toolbar1)    
+        tab2_inner_layout2.addWidget(self.tab2_toolbar2)    
 
 
 
@@ -548,18 +525,83 @@ class MainWindow(QMainWindow):
             cv2.destroyAllWindows()
 
 
+    # 이메일로 보내기
+    def send_email(self):
+        value, ok = QInputDialog.getText(self, "알림", "수신 이메일 주소를 입력하세요: ")
+
+        if ok:
+            # 이메일 발송자(관리자) 정보 입력
+            from_email = "admin_msteam06@gmail.com"   
+            password = "Msteam#06"   
+
+            subject = "주차 위반 알림"                     # 메시지 제목
+            message = "주차 위반 차량이 발견되었습니다."     # 메시지 내용
+            to_email = value                              # 수신자 이메일
+
+            msg = MIMEMultipart()
+            msg['From'] = from_email
+            msg['To'] = to_email
+            msg['Subject'] = subject
+
+            msg.attach(MIMEText(message, 'plain'))
+
+            try:
+                server = smtplib.SMTP('smtp.gmail.com', 587)    # gmail (587)
+                server.starttls()
+                server.login(from_email, password)
+                server.sendmail(from_email, to_email, msg.as_string())
+                server.quit()
+
+                self.setStatusBarMessage("이메일이 발송되었습니다.")
+
+            except:
+                self.setStatusBarMessage("이메일 발송 중 오류가 발생했습니다")
+
+
     # 이미지 불러오기
     def open_image_file(self):
         options = QFileDialog.Options()
         options |= QFileDialog.ReadOnly
-        file_name, _ = QFileDialog.getOpenFileName(self, "이미지 불러오기", "", "이미지 파일 (*.jpg *.png *.bmp);;모든 파일 (*)", options=options)
+        file_names, _ = QFileDialog.getOpenFileNames(self, "이미지 불러오기", "", "이미지 파일 (*.jpg *.png *.bmp);;모든 파일 (*)", options=options)
 
-        if file_name:
-            pixmap = QPixmap(file_name)
-            scaled_pixmap = pixmap.scaled(self.image_viewer.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            
-            self.image_viewer.setPixmap(scaled_pixmap)
-            self.image_viewer.setAlignment(Qt.AlignCenter)
+        if file_names:
+            for file_name in file_names:
+                pixmap = QPixmap(file_name)
+                scaled_pixmap = pixmap.scaled(self.image_viewer.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                
+                self.image_viewer.setPixmap(scaled_pixmap)
+                self.image_viewer.setAlignment(Qt.AlignCenter)
+
+                # 표 안에 새로운 행을 추가하고 체크 박스 채워넣기
+                target_table = self.tab2_item_list_table
+                row_position = target_table.rowCount()
+                target_table.insertRow(row_position)
+
+                row_checkbox = QTableWidgetItem()
+                row_checkbox.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled) 
+                row_checkbox.setCheckState(Qt.Unchecked)
+                target_table.setColumnWidth(0, 16)
+
+                ev_checkbox = QTableWidgetItem()
+                ev_checkbox.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled) 
+                ev_checkbox.setCheckState(Qt.Unchecked)
+
+                one_line_checkbox = QTableWidgetItem()
+                one_line_checkbox.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled) 
+                one_line_checkbox.setCheckState(Qt.Unchecked)
+
+                two_line_checkbox = QTableWidgetItem()
+                two_line_checkbox.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled) 
+                two_line_checkbox.setCheckState(Qt.Unchecked)
+
+                target_table.setItem(row_position, 0, row_checkbox)
+                target_table.setItem(row_position, 1, ev_checkbox)
+                target_table.setItem(row_position, 2, one_line_checkbox)
+                target_table.setItem(row_position, 3, two_line_checkbox)
+
+                car_image_item = QTableWidgetItem()
+                car_image_item.setIcon(QIcon(pixmap))
+                target_table.setItem(row_position, 4, car_image_item)
 
 
 
@@ -570,10 +612,97 @@ class MainWindow(QMainWindow):
                 self.video_player.clear()      # 비디오 플레이어 내용 지우기
                 self.video_source.release()      # 비디오 소스 종료
                 self.video_source = None
+        elif type == "이미지":
+            self.image_viewer.clear()    # 이미지 뷰어 내용 지우기
         
         self.setStatusBarMessage(f"{type}을 지웠습니다.")
 
+    
+    # 결과 보여주기 (새로운 창)
+    def show_the_result(self):
+        target_table = self.tab2_item_list_table
 
+        items = {}
+
+        # 테이블에서 정보 가져와서 딕셔너리에 넣기
+        for row in range(target_table.rowCount()):
+            row_number_checkbox = target_table.item(row, 0)
+
+            if row_number_checkbox.checkState() == Qt.Checked:   # 첫 번째 체크박스가 체크되어 있으면
+                is_ev_checkbox = target_table.item(row, 1)
+                is_one_line_checkbox = target_table.item(row, 2)
+                is_two_line_checkbox = target_table.item(row, 3)
+                car_image = target_table.item(row, 4)
+
+                is_ev = is_ev_checkbox.checkState() == Qt.Checked
+                is_one_line = is_one_line_checkbox.checkState() == Qt.Checked
+                is_two_line = is_two_line_checkbox.checkState() == Qt.Checked
+                car_image = car_image.icon().pixmap(QSize(9999, 9999))
+
+                items[row] = [is_ev, is_one_line, is_two_line, car_image]
+
+                # 버튼 3개
+                # 
+
+
+
+
+        # 다이얼로그를 넣을 리스트
+        dialogs = []  
+
+        for row in range(target_table.rowCount()):
+            row_number_checkbox = target_table.item(row, 0)
+
+            if row_number_checkbox.checkState() == Qt.Checked:
+                car_image = target_table.item(row, 4)
+                car_pixmap = car_image.icon().pixmap(QSize(9999, 9999))
+
+                dialog = QDialog(self)
+                dialog.setFixedSize(dialog.sizeHint())
+
+                outer_layout = QVBoxLayout()
+                
+                # 이미지 넣기
+                image_label = QLabel()
+                image_label.setPixmap(car_pixmap.scaled(self.image_viewer.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                image_label.setAlignment(Qt.AlignCenter)
+                outer_layout.addWidget(image_label)
+
+                # 설명 넣기
+                item_label = QLabel(f"<b>[Plate #{row}]</b> <b>EV</b>: {'O' if items[row][0] else 'X'} | <b>One Line Plate</b>: {'O' if items[row][1] else 'X'} | <b>Two Line Plate</b>: {'O' if items[row][2] else 'X'}")
+                label_font = QFont("Consolas", 9)
+
+                item_label.setAlignment(Qt.AlignCenter)
+                item_label.setFont(label_font)
+                
+                inner_layout = QHBoxLayout()
+                inner_layout.addWidget(item_label)
+
+                outer_layout.addLayout(inner_layout)  
+                dialog.setLayout(outer_layout)
+                dialog.setWindowTitle(f"{row}번 차량 사진")
+                dialog.setWindowIcon(fugue.icon("car-red"))
+
+                dialogs.append(dialog)  
+
+
+        # 다이얼로그 띄우기
+        for dialog in dialogs:
+            dialog.show()
+
+
+    # 테이블에 있는 사진을 더블 클릭하면 이미지 뷰어에 띄어주기
+    def copy_image_to_image_viewer(self, row, column):
+        if column == 4: 
+            item = self.tab2_item_list_table.item(row, column)
+            if item and isinstance(item, QTableWidgetItem):
+                pixmap = item.icon().pixmap(QSize(9999, 9999))   # 임의로 최대 사이즈로 설정
+                scaled_pixmap = pixmap.scaled(self.image_viewer.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+                # 이미지 뷰어에 표시
+                self.image_viewer.clear()
+                self.image_viewer.setPixmap(scaled_pixmap)
+                self.image_viewer.setAlignment(Qt.AlignCenter)
 
     # 테이블에서 선택한 행 지우기
     def delete_selected_row_on_table(self, target):
@@ -601,23 +730,3 @@ class MainWindow(QMainWindow):
             for row in range(target.rowCount()):
                 item = target.item(row, 0)
                 item.setCheckState(check_state)
-
-
-    # 버튼 클릭 이벤트 처리
-    def on_button_click(self, type):
-        ok = QMessageBox.information(self, "알림", f"{type}을(를) 클릭하였습니다. 맞습니까?")
-        
-        if ok:
-            if type == "EV":
-                self.button_return_value = 1
-
-            elif type == "One Line":
-                self.button_return_value = 2
-                
-            elif type == "Two Line":
-                self.button_return_value = 3
-        
-        QMessageBox.information(self, "알림", f"{type}({self.button_return_value})")
-        
-        # PyQt에서 시그널 함수는 반환값 처리가 어려워서 전역 변수인 self.button_return_value에 값을 넣었습니다.
-        # 필요하시면 self.button_return_value 변수를 불러와서 활용하시면 될 것 같습니다.
