@@ -28,3 +28,9 @@
 ```shell
 > pip install pyqt5-fugueicons
 ```
+
+### PyQtWebEngine
+
+```shell
+> pip install PyQtWebEngine
+```
