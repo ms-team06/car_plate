@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtWebEngineWidgets import *
 
 import pyqt5_fugueicons as fugue
+from main_window import *
 
 class CarPlateInfoViewerWindow(QMainWindow):
     def __init__(self, html, type):
